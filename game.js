@@ -780,10 +780,8 @@
       $("result-msg").style.color = "#7c3aed";
       $("result-answer").textContent = "";
     }
-    $("result-sub").textContent = noQ
-      ? "🎉 Đã mở hết các câu hỏi!"
-      : "Bàn cờ đã kín ô.";
-    setHint(noQ ? "Đã mở hết các câu hỏi." : "Không còn ô trống.", null);
+    $("result-sub").textContent = noQ ? "🎉 Đã mở hết các câu hỏi!" : "";
+    setHint(noQ ? "Đã mở hết các câu hỏi." : "", null);
     setResultButtons("Ván mới (đua lại) 🏁", false);
   }
 
