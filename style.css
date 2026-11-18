@@ -171,12 +171,85 @@ main {
 /* ---------- Màn hình chạy đua ---------- */
 .race-card { width: min(1100px, 100%); text-align: center; }
 .track {
+  --sky: 130px;
   position: relative;
   margin: 24px 0 16px;
   border-radius: var(--radius);
   overflow: hidden;
   background: #4d7c0f;
-  padding: 14px 0;
+  padding: 0;
+}
+
+/* ---- Phông nền chuyển động phía sau đường đua ---- */
+.scenery {
+  position: relative;
+  height: var(--sky);
+  margin-bottom: 10px;
+  overflow: hidden;
+  background: linear-gradient(#38bdf8, #bae6fd 75%, #dcfce7);
+}
+.sun {
+  position: absolute;
+  top: 14px; right: 90px;
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  background: #fde047;
+  box-shadow: 0 0 0 10px rgba(253,224,71,.35), 0 0 40px 10px rgba(253,224,71,.6);
+}
+.layer {
+  position: absolute;
+  left: 0; right: 0;
+  background-repeat: repeat-x;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+.clouds {
+  top: 8px; height: 60px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='360' height='60'%3E%3Cg fill='white' opacity='.92'%3E%3Cellipse cx='60' cy='38' rx='42' ry='14'/%3E%3Cellipse cx='82' cy='28' rx='25' ry='17'/%3E%3Cellipse cx='46' cy='30' rx='19' ry='13'/%3E%3Cellipse cx='250' cy='24' rx='32' ry='10'/%3E%3Cellipse cx='266' cy='16' rx='18' ry='11'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 360px 60px;
+  animation-name: scroll-clouds;
+  animation-duration: 40s; /* mây luôn trôi chậm */
+}
+.hills {
+  bottom: 0; height: 80px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='80'%3E%3Cpath d='M0 80V50Q60 10 120 45T240 40T360 30T480 50V80Z' fill='%2386efac'/%3E%3Cpath d='M0 80V62Q80 35 160 60T320 55T480 62V80Z' fill='%234ade80'/%3E%3C/svg%3E");
+  background-size: 480px 80px;
+  animation-name: scroll-hills;
+  animation-duration: 12s;
+  animation-play-state: paused;
+}
+.trees {
+  bottom: 0; height: 100px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='100'%3E%3Crect x='36' y='68' width='8' height='32' fill='%2392400e'/%3E%3Ccircle cx='40' cy='52' r='22' fill='%2316a34a'/%3E%3Ccircle cx='27' cy='62' r='14' fill='%2315803d'/%3E%3Ccircle cx='53' cy='62' r='14' fill='%2315803d'/%3E%3Crect x='126' y='80' width='8' height='20' fill='%2378350f'/%3E%3Cpolygon points='130,28 106,66 154,66' fill='%23166534'/%3E%3Cpolygon points='130,44 100,84 160,84' fill='%23166534'/%3E%3Cellipse cx='200' cy='92' rx='24' ry='13' fill='%2322c55e'/%3E%3Ccircle cx='192' cy='88' r='3' fill='%23f472b6'/%3E%3Ccircle cx='208' cy='86' r='3' fill='%23facc15'/%3E%3C/svg%3E");
+  background-size: 240px 100px;
+  animation-name: scroll-trees;
+  animation-duration: 3s;
+  animation-play-state: paused;
+}
+.flowers {
+  position: relative;
+  height: 34px;
+  margin-top: 10px;
+  background-color: #65a30d;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='34'%3E%3Cpath d='M20 34l4-12 4 12M70 34l3-10 3 10M120 34l4-13 4 13M170 34l3-9 3 9' fill='%234d7c0f'/%3E%3Ccircle cx='40' cy='14' r='5' fill='%23facc15'/%3E%3Ccircle cx='40' cy='14' r='2' fill='%23f97316'/%3E%3Ccircle cx='100' cy='20' r='5' fill='%23f472b6'/%3E%3Ccircle cx='100' cy='20' r='2' fill='white'/%3E%3Ccircle cx='155' cy='12' r='5' fill='white'/%3E%3Ccircle cx='155' cy='12' r='2' fill='%23facc15'/%3E%3C/svg%3E");
+  background-size: 200px 34px;
+  animation-name: scroll-flowers;
+  animation-duration: 1.4s;
+  animation-play-state: paused;
+}
+.track.running .hills,
+.track.running .trees,
+.track.running .flowers { animation-play-state: running; }
+@keyframes scroll-clouds { to { background-position-x: -360px; } }
+@keyframes scroll-hills { to { background-position-x: -480px; } }
+@keyframes scroll-trees { to { background-position-x: -240px; } }
+@keyframes scroll-flowers { to { background-position-x: -200px; } }
+@keyframes scroll-clouds-s { to { background-position-x: -270px; } }
+@keyframes scroll-hills-s { to { background-position-x: -360px; } }
+@keyframes scroll-trees-s { to { background-position-x: -180px; } }
+@keyframes scroll-flowers-s { to { background-position-x: -150px; } }
+@media (prefers-reduced-motion: reduce) {
+  .layer { animation: none !important; }
 }
 .lane {
   position: relative;
@@ -222,7 +295,7 @@ main {
 
 .finish-line {
   position: absolute;
-  top: 0; bottom: 0;
+  top: calc(var(--sky) - 20px); bottom: 0;
   right: 40px;
   width: 24px;
   background:
@@ -251,6 +324,8 @@ main {
 }
 .race-result.x { color: var(--x); }
 .race-result.o { color: var(--o); }
+.race-result.live { font-size: 1.4rem; animation: pop .35s ease-out; }
+.race-result.live:not(.x):not(.o) { color: #d97706; }
 .race-actions { display: flex; justify-content: center; gap: 16px; margin-top: 8px; }
 
 /* ---------- Màn hình chơi ---------- */
@@ -288,7 +363,22 @@ main {
 .cell.placed { animation: place .35s ease-out; }
 @keyframes place { from { transform: scale(.4); } 70% { transform: scale(1.12); } to { transform: scale(1); } }
 .board.pick-X .cell:empty,
-.board.pick-O .cell:empty { cursor: pointer; animation: glow 1s infinite alternate; }
+.board.pick-O .cell:empty,
+.board.pick-bonus .cell:empty { cursor: pointer; animation: glow 1s infinite alternate; }
+.board.pick-bonus .cell:empty:hover { background: #ede9fe; }
+
+/* Ô đội vừa chọn, đang chờ trả lời câu hỏi */
+.cell.selected { animation: selpulse .8s ease-in-out infinite alternate; }
+.cell.sel-X { background: var(--x-soft); box-shadow: inset 0 -5px 0 #fecaca, 0 0 0 5px var(--x); }
+.cell.sel-O { background: var(--o-soft); box-shadow: inset 0 -5px 0 #bfdbfe, 0 0 0 5px var(--o); }
+.cell.sel-bonus { background: #ede9fe; box-shadow: inset 0 -5px 0 #ddd6fe, 0 0 0 5px #7c3aed; }
+.cell.selected::after { content: "?"; font-size: .6em; opacity: .5; color: var(--ink); }
+@keyframes selpulse { to { transform: scale(.94); } }
+
+/* Ô đã mở ở phần câu hỏi thêm */
+.cell.bonus-ok, .cell.bonus-no { font-size: clamp(2rem, 6vh, 4rem); background: #f5f3ff; box-shadow: inset 0 -5px 0 #ede9fe; }
+.cell.bonus-ok { color: var(--success); }
+.cell.bonus-no { color: #9ca3af; }
 .board.pick-X .cell:empty:hover { background: var(--x-soft); }
 .board.pick-O .cell:empty:hover { background: var(--o-soft); }
 @keyframes glow { from { box-shadow: inset 0 -5px 0 #e5e7eb, 0 0 0 0 rgba(124,58,237,0); } to { box-shadow: inset 0 -5px 0 #e5e7eb, 0 0 0 4px rgba(124,58,237,.5); } }
@@ -307,6 +397,10 @@ main {
 }
 .turn-banner.X { background: var(--x); }
 .turn-banner.O { background: var(--o); }
+.turn-banner.bonus { background: #7c3aed; }
+.ready-sub { margin: 0; font-size: 1.1rem; font-weight: 600; }
+.btn.bonus { background: #f59e0b; color: #fff; }
+.btn.bonus:hover { background: #d97706; }
 
 .phase { display: none; flex-direction: column; gap: 14px; flex: 1; }
 .phase.active { display: flex; }
@@ -421,6 +515,7 @@ main {
 @media (hover: hover) {
   .board.pick-X .cell:empty:hover::after { content: "X"; color: var(--x); opacity: .45; }
   .board.pick-O .cell:empty:hover::after { content: "O"; color: var(--o); opacity: .45; }
+  .board.pick-bonus .cell:empty:hover::after { content: "?"; color: #7c3aed; opacity: .5; }
 }
 
 /* ---------- Máy tính bảng / điện thoại ngang ---------- */
@@ -471,7 +566,14 @@ main {
   .setup-card .btn.big { width: 100%; }
 
   .race-card h2 { font-size: 1.25rem; }
-  .track { margin: 14px 0 10px; padding: 10px 0; }
+  .track { margin: 14px 0 10px; --sky: 100px; }
+  /* Ảnh nền nhỏ lại 3/4 → quãng cuộn cũng phải nhỏ theo để lặp liền mạch */
+  .clouds { background-size: 270px 45px; height: 45px; animation-name: scroll-clouds-s; }
+  .hills { height: 60px; background-size: 360px 60px; animation-name: scroll-hills-s; }
+  .trees { height: 75px; background-size: 180px 75px; animation-name: scroll-trees-s; }
+  .sun { width: 38px; height: 38px; right: 50px; top: 10px; }
+  .flowers { height: 26px; background-size: 150px 26px; animation-name: scroll-flowers-s; }
+  .race-result.live { font-size: 1.1rem; }
   .lane { height: 76px; }
   .lane-label { font-size: .85rem; top: 2px; left: 8px; }
   .racer { width: 54px; height: 54px; margin-top: -27px; font-size: 2rem; border-width: 4px; left: 10px; }
@@ -497,6 +599,7 @@ main {
   .judge .btn { padding-top: 16px; padding-bottom: 16px; }
   .judge-extra .btn { flex: 1 1 30%; padding: 8px 6px; font-size: .9rem; }
   #phase-ready .btn, #phase-result .btn { width: 100%; }
+  .ready-sub { font-size: .95rem; }
 
   .overlay-card { padding: 26px 20px; border-radius: 20px; }
   .overlay-mark { font-size: 5rem; }

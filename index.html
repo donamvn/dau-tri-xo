@@ -60,6 +60,12 @@
       <div class="card race-card">
         <h2>Cuộc đua giành quyền trả lời trước!</h2>
         <div class="track" id="track">
+          <div class="scenery" aria-hidden="true">
+            <div class="sun"></div>
+            <div class="layer clouds"></div>
+            <div class="layer hills"></div>
+            <div class="layer trees"></div>
+          </div>
           <div class="lane x">
             <div class="lane-label" data-team-name="X">Đội X</div>
             <div class="racer x" id="racer-X"><span>X</span></div>
@@ -68,6 +74,7 @@
             <div class="lane-label" data-team-name="O">Đội O</div>
             <div class="racer o" id="racer-O"><span>O</span></div>
           </div>
+          <div class="layer flowers" aria-hidden="true"></div>
           <div class="finish-line"></div>
           <div class="race-countdown" id="race-countdown"></div>
         </div>
@@ -100,10 +107,10 @@
         <div class="card question-card">
           <div class="turn-banner" id="turn-banner"></div>
 
-          <!-- Chờ hiện câu hỏi -->
+          <!-- Chờ đội chọn ô trên bàn cờ -->
           <div class="phase" id="phase-ready">
-            <p class="big-msg">Sẵn sàng chưa?</p>
-            <button id="btn-show-question" class="btn primary big">Hiện câu hỏi ▶</button>
+            <p class="big-msg" id="ready-msg"></p>
+            <p class="muted ready-sub" id="ready-sub"></p>
           </div>
 
           <!-- Đang trả lời -->
@@ -125,7 +132,7 @@
             <div class="judge-extra">
               <button id="btn-reveal" class="btn ghost">Hiện đáp án</button>
               <button id="btn-pause" class="btn ghost">⏸ Tạm dừng</button>
-              <button id="btn-skip" class="btn ghost">Đổi câu khác</button>
+              <button id="btn-skip" class="btn ghost">Bỏ qua câu này</button>
             </div>
           </div>
 
@@ -133,7 +140,9 @@
           <div class="phase" id="phase-result">
             <p class="big-msg" id="result-msg"></p>
             <div class="q-answer" id="result-answer"></div>
+            <p class="muted ready-sub" id="result-sub"></p>
             <button id="btn-next-turn" class="btn primary big">Tiếp tục ▶</button>
+            <button id="btn-bonus" class="btn bonus hidden">⭐ Mở câu hỏi còn lại</button>
           </div>
         </div>
       </div>
@@ -147,6 +156,7 @@
       <h2 id="overlay-title"></h2>
       <p id="overlay-sub" class="muted"></p>
       <div class="overlay-actions">
+        <button id="btn-open-bonus" class="btn bonus big hidden">⭐ Mở câu hỏi còn lại</button>
         <button id="btn-new-round" class="btn primary big">Ván mới (đua lại) 🏁</button>
         <button id="btn-close-overlay" class="btn ghost">Xem lại bàn cờ</button>
       </div>

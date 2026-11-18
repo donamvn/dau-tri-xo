@@ -20,11 +20,13 @@
     wins: { X: 0, O: 0 },
     board: Array(9).fill(null),
     turn: "X",
-    phase: "ready", // ready | asking | place | result | over
+    phase: "pick", // pick | opening | asking | checking | result | over
+    mode: "main", // main = đang đấu, bonus = mở các câu hỏi còn lại sau khi có đội thắng
     order: [],
-    qPos: 0,
-    qCount: 0,
+    qPos: 0, // số câu đã dùng trong danh sách
     current: null,
+    pendingCell: null, // ô đội vừa chọn, chờ trả lời
+    revealed: false,
   };
 
   /* ================= Âm thanh (tự tạo, không cần file) ================= */
@@ -64,6 +66,96 @@
     fanfare() { [523, 659, 784, 1047, 784, 1047].forEach((f, i) => this.tone(f, 0.28, "triangle", i * 0.14, 0.22)); },
   };
 
+  /* ================= Nhạc nền cuộc đua (tự sáng tác, phát bằng WebAudio) ================= */
+  const Music = {
+    // Mỗi ô là 1 nốt móc đơn; 0 = nghỉ. Số là cao độ MIDI.
+    melody: [
+      72, 0, 76, 79, 0, 76, 79, 81, 79, 0, 76, 0, 74, 76, 72, 0,
+      74, 0, 77, 81, 0, 77, 81, 83, 81, 0, 79, 0, 77, 79, 74, 0,
+      72, 0, 76, 79, 0, 76, 79, 84, 83, 81, 79, 77, 76, 0, 74, 0,
+      77, 76, 74, 72, 74, 76, 77, 79, 81, 79, 77, 76, 74, 0, 72, 0,
+    ],
+    bass: [48, 55, 52, 55, 48, 55, 52, 55, 50, 57, 53, 57, 50, 57, 53, 57,
+           48, 55, 52, 55, 48, 55, 52, 55, 43, 50, 47, 50, 43, 50, 47, 50],
+    bpm: 150,
+    step: 0,
+    nextTime: 0,
+    timer: null,
+    out: null,
+    freq: (m) => 440 * Math.pow(2, (m - 69) / 12),
+
+    note(m, t, dur, type, vol) {
+      const ctx = Sound.ctx;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(this.freq(m), t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(vol, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(this.out);
+      o.start(t);
+      o.stop(t + dur + 0.02);
+    },
+
+    drum(t, accent) {
+      const ctx = Sound.ctx;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.setValueAtTime(accent ? 150 : 900, t);
+      o.frequency.exponentialRampToValueAtTime(accent ? 40 : 600, t + 0.08);
+      g.gain.setValueAtTime(accent ? 0.35 : 0.04, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + (accent ? 0.15 : 0.04));
+      o.connect(g).connect(this.out);
+      o.start(t);
+      o.stop(t + 0.2);
+    },
+
+    schedule() {
+      const ctx = Sound.ctx;
+      const stepDur = 60 / this.bpm / 2; // móc đơn
+      while (this.nextTime < ctx.currentTime + 0.12) {
+        const s = this.step;
+        const m = this.melody[s % this.melody.length];
+        if (m) this.note(m, this.nextTime, stepDur * 0.9, "square", 0.05);
+        if (s % 2 === 0) this.note(this.bass[(s / 2) % this.bass.length], this.nextTime, stepDur * 1.6, "triangle", 0.16);
+        this.drum(this.nextTime, s % 4 === 0);
+        this.nextTime += stepDur;
+        this.step++;
+      }
+    },
+
+    start() {
+      if (!Sound.on || this.timer) return;
+      const ctx = Sound.ensure();
+      if (!ctx) return;
+      this.out = ctx.createGain();
+      this.out.gain.value = 0.8;
+      this.out.connect(ctx.destination);
+      this.bpm = 150;
+      this.step = 0;
+      this.nextTime = ctx.currentTime + 0.05;
+      this.timer = setInterval(() => this.schedule(), 25);
+      this.schedule();
+    },
+
+    faster() { this.bpm = 185; }, // dồn nhịp khi gần về đích
+
+    stop() {
+      if (!this.timer) return;
+      clearInterval(this.timer);
+      this.timer = null;
+      const out = this.out;
+      const ctx = Sound.ctx;
+      if (out && ctx) {
+        out.gain.setTargetAtTime(0, ctx.currentTime, 0.05);
+        setTimeout(() => out.disconnect(), 400);
+      }
+      this.out = null;
+    },
+  };
+
   /* ================= Tiện ích giao diện ================= */
   function showScreen(name) {
     document.querySelectorAll(".screen").forEach((s) =>
@@ -88,6 +180,11 @@
 
   function renderTurn() {
     const banner = $("turn-banner");
+    if (state.mode === "bonus") {
+      banner.className = "turn-banner bonus";
+      banner.textContent = "⭐ Câu hỏi thêm";
+      return;
+    }
     banner.className = "turn-banner " + state.turn;
     banner.textContent = "Lượt của " + state.names[state.turn] + " (" + state.turn + ")";
   }
@@ -147,6 +244,8 @@
   function resetRace() {
     raceRunning = false;
     raceWinner = null;
+    Music.stop();
+    $("track").classList.remove("running");
     ["X", "O"].forEach((t) => {
       const el = $("racer-" + t);
       el.style.transform = "translateX(0)";
@@ -181,6 +280,7 @@
         if (i < steps.length - 1) Sound.beep();
         else {
           Sound.go();
+          Music.start();
           runRace();
           setTimeout(() => (cd.textContent = ""), 600);
         }
@@ -199,6 +299,10 @@
     const width = racers[0].el.offsetWidth;
     const dist = finish.offsetLeft + finish.offsetWidth / 2 - startLeft - width;
 
+    $("track").classList.add("running"); // cho cây cối, đồi núi chạy
+    const res = $("race-result");
+    let leader = null;
+    let sprint = false;
     let last = performance.now();
     let elapsed = 0;
 
@@ -208,12 +312,26 @@
       elapsed += dt;
       for (const r of racers) {
         if (elapsed >= r.nextChange) {
-          const boost = Math.random() < 0.15; // thỉnh thoảng tăng tốc bất ngờ
-          r.speed = boost ? rand(0.38, 0.5) : rand(0.12, 0.3);
-          r.nextChange = elapsed + rand(0.25, 0.7);
+          const boost = Math.random() < 0.12; // thỉnh thoảng tăng tốc bất ngờ
+          r.speed = boost ? rand(0.17, 0.23) : rand(0.06, 0.14); // ~9–10 giây mới về đích
+          r.nextChange = elapsed + rand(0.4, 1.0);
         }
         r.pos += r.speed * dt;
         r.el.style.transform = "translateX(" + Math.min(r.pos, 1) * dist + "px)";
+      }
+
+      // Bình luận trực tiếp: ai đang dẫn trước
+      const [a, b] = racers;
+      const lead = Math.abs(a.pos - b.pos) < 0.015 ? null : a.pos > b.pos ? a.t : b.t;
+      if (!sprint && Math.max(a.pos, b.pos) > 0.8) {
+        sprint = true; // sắp về đích: nhạc dồn nhịp, đổi lời bình
+        Music.faster();
+        leader = null;
+      }
+      if (elapsed > 1 && lead && lead !== leader) {
+        leader = lead;
+        res.className = "race-result live " + lead.toLowerCase();
+        res.textContent = (sprint ? "⚡ Nước rút! " : "🔥 ") + state.names[lead] + " đang dẫn trước!";
       }
       const done = racers.filter((r) => r.pos >= 1);
       if (done.length) {
@@ -228,6 +346,8 @@
 
   function endRace(winner, racers) {
     raceWinner = winner;
+    Music.stop();
+    $("track").classList.remove("running");
     racers.forEach((r) => r.el.classList.remove("running"));
     $("racer-" + winner).classList.add("winner");
     const res = $("race-result");
@@ -238,7 +358,7 @@
     $("btn-to-game").classList.remove("hidden");
   }
 
-  /* ================= Câu hỏi ================= */
+  /* ================= Câu hỏi (luôn hỏi theo thứ tự trong file) ================= */
   function buildOrder() {
     state.order = QUESTIONS.map((_, i) => i);
     if (CONFIG.shuffle) {
@@ -250,9 +370,12 @@
     state.qPos = 0;
   }
 
+  const remainingQuestions = () => state.order.length - state.qPos;
+  const emptyCells = () => state.board.filter((v) => !v).length;
+  const canOpenBonus = () => remainingQuestions() > 0 && emptyCells() > 0;
+
   function takeQuestion() {
-    if (!QUESTIONS.length) return null;
-    if (state.qPos >= state.order.length) buildOrder(); // hết câu thì quay lại từ đầu
+    if (state.qPos >= state.order.length) return null; // hết danh sách
     return QUESTIONS[state.order[state.qPos++]];
   }
 
@@ -270,14 +393,16 @@
   const isAuto = (q) => !!q && correctOptionIndex(q) >= 0;
 
   function answerText(q) {
-    if (q.answer === undefined || q.answer === null || q.answer === "") return "";
+    if (!q || q.answer === undefined || q.answer === null || q.answer === "") return "";
     const idx = correctOptionIndex(q);
     if (idx >= 0) return "Đáp án: " + String.fromCharCode(65 + idx) + ". " + q.options[idx];
     return "Đáp án: " + q.answer;
   }
 
   function renderQuestion(q) {
-    $("q-number").textContent = "Câu hỏi số " + state.qCount;
+    $("q-number").textContent =
+      (state.mode === "bonus" ? "⭐ Câu hỏi thêm · " : "") +
+      "Câu " + state.qPos + "/" + state.order.length;
     $("q-text").textContent = q.question;
 
     const img = $("q-image");
@@ -311,6 +436,7 @@
     // Câu trắc nghiệm: ẩn nút Đúng/Sai vì máy tự chấm; câu tự luận: người dẫn chấm
     document.querySelector(".judge").classList.toggle("hidden", auto);
     $("auto-hint").classList.toggle("hidden", !auto);
+    $("btn-skip").disabled = remainingQuestions() === 0;
 
     const ans = $("q-answer");
     ans.textContent = "";
@@ -354,19 +480,18 @@
     if (idx >= 0) $("q-options").children[idx].classList.add("correct");
   }
 
-  function showQuestion(isSkip) {
+  function showQuestion() {
     const q = takeQuestion();
-    if (!q) {
-      alert("Chưa có câu hỏi nào. Hãy thêm câu hỏi vào file questions.js rồi tải lại trang.");
-      return;
-    }
-    if (!isSkip) state.qCount++;
+    if (!q) return toPick(); // toPick tự xử lý khi hết câu
     state.current = q;
     state.revealed = false;
     state.phase = "asking";
     renderQuestion(q);
     setPhase("asking");
-    setHint(state.names[state.turn] + " đang trả lời…", state.turn);
+    setHint(
+      state.mode === "bonus" ? "Đang trả lời câu hỏi thêm…" : state.names[state.turn] + " đang trả lời…",
+      state.mode === "bonus" ? null : state.turn
+    );
     const t = Number(q.time) > 0 ? Number(q.time) : CONFIG.defaultTime;
     startTimer(t);
     scrollToEl(document.querySelector(".question-card"), "start");
@@ -438,141 +563,244 @@
     fill.style.width = pct + "%";
     fill.classList.toggle("mid", pct <= 50 && pct > 20);
     fill.classList.toggle("low", pct <= 20);
-    if (T.remaining <= 0) {
-      text.textContent = "⏰ Hết giờ!";
-    } else {
-      text.textContent = Math.ceil(T.remaining) + " giây";
-    }
+    text.textContent = T.remaining <= 0 ? "⏰ Hết giờ!" : Math.ceil(T.remaining) + " giây";
     text.classList.toggle("low", T.remaining > 0 && T.remaining <= 5 && T.running);
     text.classList.toggle("paused", !T.running && T.remaining > 0);
   }
 
-  /* ================= Chấm điểm ================= */
+  /* ================= Chọn ô → trả lời câu hỏi ================= */
+  function cellEl(i) {
+    return document.querySelector('.cell[data-i="' + i + '"]');
+  }
+
+  function setResultButtons(nextLabel, showBonus) {
+    const btn = $("btn-next-turn");
+    btn.textContent = nextLabel;
+    btn.classList.toggle("hidden", !nextLabel);
+    $("btn-bonus").classList.toggle("hidden", !showBonus);
+    $("btn-bonus").textContent = "⭐ Mở " + remainingQuestions() + " câu hỏi còn lại";
+  }
+
+  // Chờ đội (hoặc cả lớp, ở phần câu hỏi thêm) chọn 1 ô trống
+  function toPick() {
+    state.current = null;
+    state.pendingCell = null;
+    renderTurn();
+
+    if (state.mode === "bonus") {
+      if (!canOpenBonus()) return endBonus();
+    } else if (remainingQuestions() === 0) {
+      return endNoQuestions();
+    }
+
+    state.phase = "pick";
+    $("board").className = "board pick-" + (state.mode === "bonus" ? "bonus" : state.turn);
+    setPhase("ready");
+    const left = remainingQuestions();
+    if (state.mode === "bonus") {
+      $("ready-msg").textContent = "Chọn 1 ô còn trống để mở câu hỏi";
+      $("ready-msg").style.color = "#7c3aed";
+      setHint("👉 Bấm vào 1 ô còn trống", null);
+    } else {
+      $("ready-msg").textContent = "👉 " + state.names[state.turn] + " chọn 1 ô trên bàn cờ";
+      $("ready-msg").style.color = state.turn === "X" ? "var(--x)" : "var(--o)";
+      setHint("👉 " + state.names[state.turn] + " hãy chọn 1 ô", state.turn);
+    }
+    $("ready-sub").textContent =
+      "Câu hỏi tiếp theo: câu " + (state.qPos + 1) + "/" + state.order.length + " · còn " + left + " câu";
+    scrollToEl(document.querySelector(".board-card"), "center");
+  }
+
+  function onCellClick(e) {
+    const cell = e.target.closest(".cell");
+    if (!cell || state.phase !== "pick") return;
+    const i = Number(cell.dataset.i);
+    if (state.board[i]) return;
+    state.pendingCell = i;
+    state.phase = "opening";
+    $("board").className = "board";
+    cell.classList.add("selected", "sel-" + (state.mode === "bonus" ? "bonus" : state.turn));
+    Sound.place();
+    setTimeout(showQuestion, 450);
+  }
+
+  function clearSelection() {
+    if (state.pendingCell === null) return;
+    cellEl(state.pendingCell).classList.remove("selected", "sel-X", "sel-O", "sel-bonus");
+  }
+
   function judge(isCorrect, opts) {
     opts = opts || {};
     if (state.phase !== "asking" && state.phase !== "checking") return;
     stopTimer();
-    const team = state.turn;
     $("result-answer").textContent = answerText(state.current);
     setPhase("result");
+    state.phase = "result";
+    if (isCorrect && !opts.silent) Sound.correct();
+    if (!isCorrect && !opts.silent) Sound.wrong();
 
-    if (isCorrect) {
-      if (!opts.silent) Sound.correct();
-      state.phase = "place";
-      $("result-msg").textContent = "✓ Chính xác!";
-      $("result-msg").style.color = "var(--success)";
-      $("btn-next-turn").classList.add("hidden");
-      $("board").className = "board pick-" + team;
-      setHint("👉 " + state.names[team] + " hãy chọn 1 ô để đánh " + team, team);
-      scrollToEl(document.querySelector(".board-card"), "center");
-    } else {
-      if (!opts.silent) Sound.wrong();
-      state.phase = "result";
-      $("result-msg").textContent = opts.timeout ? "⏰ Hết giờ rồi!" : "✗ Chưa đúng rồi!";
-      $("result-msg").style.color = "var(--danger)";
-      const btn = $("btn-next-turn");
-      btn.textContent = "Chuyển lượt cho " + state.names[other(team)] + " ▶";
-      btn.classList.remove("hidden");
-      setHint("Không được đánh ô nào lượt này.", null);
-    }
-  }
+    const msg = $("result-msg");
+    msg.textContent = isCorrect ? "✓ Chính xác!" : opts.timeout ? "⏰ Hết giờ rồi!" : "✗ Chưa đúng rồi!";
+    msg.style.color = isCorrect ? "var(--success)" : "var(--danger)";
 
-  function nextTurn() {
-    if (state.phase === "over") {
-      goRace();
+    const i = state.pendingCell;
+    clearSelection();
+    const cell = cellEl(i);
+
+    // Phần câu hỏi thêm: chỉ đánh dấu ô đã mở
+    if (state.mode === "bonus") {
+      state.board[i] = "used";
+      cell.textContent = isCorrect ? "✓" : "✗";
+      cell.classList.add(isCorrect ? "bonus-ok" : "bonus-no", "placed");
+      $("result-sub").textContent = "";
+      if (canOpenBonus()) {
+        setResultButtons("Mở câu tiếp theo ▶", false);
+        setHint("Còn " + remainingQuestions() + " câu hỏi chưa mở", null);
+      } else {
+        endBonus();
+      }
       return;
     }
-    state.turn = other(state.turn);
-    toReady();
+
+    const team = state.turn;
+    if (isCorrect) {
+      state.board[i] = team;
+      cell.textContent = team;
+      cell.classList.add(team, "placed");
+      setTimeout(() => Sound.place(), 250);
+      const win = findWinner();
+      if (win) return finishGame(win);
+      if (emptyCells() === 0) return finishGame(null);
+      $("result-sub").textContent = state.names[team] + " được đánh " + team + " vào ô đã chọn.";
+      setHint(state.names[team] + " đã đánh " + team, team);
+    } else {
+      $("result-sub").textContent = "Ô vẫn để trống – lượt sau vẫn chọn lại được.";
+      setHint("Không được đánh ô nào lượt này.", null);
+    }
+
+    if (remainingQuestions() === 0) {
+      setResultButtons("Xem kết quả ▶", false);
+    } else {
+      setResultButtons("Lượt của " + state.names[other(team)] + " ▶", false);
+    }
   }
 
-  function toReady() {
-    state.phase = "ready";
-    state.current = null;
-    $("board").className = "board";
-    renderTurn();
-    setPhase("ready");
-    setHint("Chờ câu hỏi cho " + state.names[state.turn], state.turn);
+  function onNextClick() {
+    if (state.phase === "over") return goRace();
+    if (state.phase !== "result") return;
+    if (state.mode === "main") state.turn = other(state.turn);
+    toPick();
   }
 
-  /* ================= Bàn cờ ================= */
+  /* ================= Thắng / hòa / hết câu ================= */
   function findWinner() {
     for (const line of LINES) {
       const [a, b, c] = line;
-      if (state.board[a] && state.board[a] === state.board[b] && state.board[a] === state.board[c]) {
-        return { team: state.board[a], line };
+      const v = state.board[a];
+      if ((v === "X" || v === "O") && v === state.board[b] && v === state.board[c]) {
+        return { team: v, line };
       }
     }
     return null;
   }
 
-  function onCellClick(e) {
-    const cell = e.target.closest(".cell");
-    if (!cell || state.phase !== "place") return;
-    const i = Number(cell.dataset.i);
-    if (state.board[i]) return;
+  function showOverlay(markText, markClass, title, sub) {
+    const mark = $("overlay-mark");
+    mark.textContent = markText;
+    mark.className = "overlay-mark " + (markClass || "");
+    $("overlay-title").textContent = title;
+    $("overlay-sub").textContent = sub;
+    const bonus = canOpenBonus();
+    $("btn-open-bonus").classList.toggle("hidden", !bonus);
+    $("btn-open-bonus").textContent = "⭐ Mở " + remainingQuestions() + " câu hỏi còn lại";
+  }
 
-    const team = state.turn;
-    state.board[i] = team;
-    cell.textContent = team;
-    cell.classList.add(team, "placed");
-    $("board").className = "board";
-    Sound.place();
-
-    const win = findWinner();
-    if (win) return finishGame(win);
-    if (state.board.every(Boolean)) return finishGame(null);
-
-    state.turn = other(team);
-    setTimeout(toReady, 500);
-    state.phase = "between";
+  function bonusNote() {
+    return canOpenBonus()
+      ? " Còn " + remainingQuestions() + " câu hỏi chưa dùng – có thể bấm vào các ô trống để mở tiếp."
+      : "";
   }
 
   function finishGame(win) {
     state.phase = "over";
-    setPhase("result");
-    const btn = $("btn-next-turn");
-    btn.textContent = "Ván mới (đua lại) 🏁";
-    btn.classList.remove("hidden");
-    $("result-answer").textContent = "";
-
-    const mark = $("overlay-mark");
+    $("board").className = "board";
     if (win) {
       state.wins[win.team]++;
       renderTeams();
-      win.line.forEach((i) => document.querySelector('.cell[data-i="' + i + '"]').classList.add("win"));
+      win.line.forEach((i) => cellEl(i).classList.add("win"));
       $("result-msg").textContent = "🏆 " + state.names[win.team] + " thắng!";
       $("result-msg").style.color = win.team === "X" ? "var(--x)" : "var(--o)";
+      $("result-sub").textContent = "Xếp được 3 " + win.team + " thẳng hàng." + bonusNote();
       setHint(state.names[win.team] + " có 3 ô thẳng hàng!", win.team);
-      mark.textContent = win.team;
-      mark.className = "overlay-mark " + win.team;
-      $("overlay-title").textContent = state.names[win.team] + " chiến thắng!";
-      $("overlay-sub").textContent = "Đã xếp được 3 " + win.team + " thẳng hàng. Tỉ số: " +
-        state.names.X + " " + state.wins.X + " – " + state.wins.O + " " + state.names.O;
+      showOverlay(
+        win.team, win.team, state.names[win.team] + " chiến thắng!",
+        "Tỉ số: " + state.names.X + " " + state.wins.X + " – " + state.wins.O + " " + state.names.O + "." + bonusNote()
+      );
       Sound.fanfare();
       confetti();
     } else {
       $("result-msg").textContent = "🤝 Hòa!";
       $("result-msg").style.color = "";
-      setHint("Bàn cờ đã kín ô, không đội nào thắng.", null);
-      mark.textContent = "🤝";
-      mark.className = "overlay-mark";
-      $("overlay-title").textContent = "Hòa nhau!";
-      $("overlay-sub").textContent = "Bàn cờ đã kín mà chưa đội nào có 3 ô thẳng hàng.";
+      $("result-sub").textContent = "Bàn cờ đã kín mà chưa đội nào có 3 ô thẳng hàng.";
+      setHint("Bàn cờ đã kín ô.", null);
+      showOverlay("🤝", "", "Hòa nhau!", "Bàn cờ đã kín mà chưa đội nào có 3 ô thẳng hàng.");
       Sound.beep();
     }
+    setResultButtons("Ván mới (đua lại) 🏁", canOpenBonus());
     setTimeout(() => $("overlay").classList.remove("hidden"), win ? 700 : 300);
+  }
+
+  // Hết danh sách câu hỏi mà chưa đội nào thắng
+  function endNoQuestions() {
+    state.phase = "over";
+    $("board").className = "board";
+    setPhase("result");
+    $("result-msg").textContent = "📋 Đã hết câu hỏi!";
+    $("result-msg").style.color = "";
+    $("result-answer").textContent = "";
+    $("result-sub").textContent = "Chưa đội nào xếp được 3 ô thẳng hàng – ván này hòa.";
+    setHint("Đã dùng hết " + state.order.length + " câu hỏi.", null);
+    setResultButtons("Ván mới (đua lại) 🏁", false);
+    showOverlay("📋", "", "Đã hết câu hỏi!", "Chưa đội nào xếp được 3 ô thẳng hàng – ván này hòa.");
+    Sound.beep();
+    setTimeout(() => $("overlay").classList.remove("hidden"), 300);
+  }
+
+  function startBonus() {
+    $("overlay").classList.add("hidden");
+    state.mode = "bonus";
+    toPick();
+  }
+
+  function endBonus() {
+    state.phase = "over";
+    $("board").className = "board";
+    setPhase("result");
+    const noQ = remainingQuestions() === 0;
+    // Gọi từ toPick (không có câu đang hỏi) → thay thông báo; gọi ngay sau khi chấm → giữ kết quả câu vừa rồi
+    if (state.current === null) {
+      $("result-msg").textContent = "⭐ Kết thúc phần câu hỏi thêm";
+      $("result-msg").style.color = "#7c3aed";
+      $("result-answer").textContent = "";
+    }
+    $("result-sub").textContent = noQ
+      ? "🎉 Đã mở hết các câu hỏi!"
+      : "Bàn cờ đã kín ô – còn " + remainingQuestions() + " câu chưa dùng.";
+    setHint(noQ ? "Đã mở hết các câu hỏi." : "Không còn ô trống.", null);
+    setResultButtons("Ván mới (đua lại) 🏁", false);
   }
 
   function newGame(firstTeam) {
     state.board = Array(9).fill(null);
+    state.mode = "main";
+    buildOrder(); // mỗi ván mới hỏi lại từ câu 1
     document.querySelectorAll(".cell").forEach((c) => {
       c.textContent = "";
       c.className = "cell";
     });
     state.turn = firstTeam;
     showScreen("game");
-    toReady();
+    toPick();
   }
 
   /* ================= Gắn sự kiện ================= */
@@ -586,15 +814,18 @@
     $("btn-race").addEventListener("click", startRace);
     $("btn-to-game").addEventListener("click", () => newGame(raceWinner || "X"));
 
-    $("btn-show-question").addEventListener("click", () => showQuestion(false));
     $("btn-correct").addEventListener("click", () => judge(true));
     $("btn-wrong").addEventListener("click", () => judge(false));
     $("btn-reveal").addEventListener("click", revealAnswer);
     $("btn-pause").addEventListener("click", togglePause);
     $("btn-skip").addEventListener("click", () => {
-      if (state.phase === "asking") showQuestion(true);
+      // Bỏ câu hiện tại, lấy câu kế tiếp trong danh sách cho cùng ô đó
+      if (state.phase === "asking" && remainingQuestions() > 0) showQuestion();
     });
-    $("btn-next-turn").addEventListener("click", nextTurn);
+    $("btn-next-turn").addEventListener("click", onNextClick);
+    $("btn-bonus").addEventListener("click", startBonus);
+    $("board").addEventListener("click", onCellClick);
+
     const pickFromEvent = (e) => {
       const li = e.target.closest("li[data-i]");
       if (li) pickOption(Number(li.dataset.i));
@@ -606,18 +837,23 @@
         pickFromEvent(e);
       }
     });
-    $("board").addEventListener("click", onCellClick);
 
     $("btn-new-round").addEventListener("click", () => {
       $("overlay").classList.add("hidden");
       goRace();
     });
+    $("btn-open-bonus").addEventListener("click", startBonus);
     $("btn-close-overlay").addEventListener("click", () => $("overlay").classList.add("hidden"));
 
     $("btn-sound").addEventListener("click", () => {
       Sound.on = !Sound.on;
       $("btn-sound").textContent = Sound.on ? "🔊" : "🔇";
-      if (Sound.on) Sound.ensure();
+      if (Sound.on) {
+        Sound.ensure();
+        if ($("track").classList.contains("running")) Music.start();
+      } else {
+        Music.stop();
+      }
     });
   }
 

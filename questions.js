@@ -13,6 +13,13 @@
  *   image    : đường dẫn ảnh minh họa, vd "images/cau1.png" (không bắt buộc)
  *
  * Lưu ý: các khối cách nhau bằng dấu phẩy, chữ đặt trong dấu ngoặc kép "...".
+ *
+ * Cách dùng câu hỏi trong game:
+ *   - Đội chọn 1 ô trên bàn cờ, rồi câu hỏi hiện ra THEO ĐÚNG THỨ TỰ trong danh sách này
+ *     (ô nào cũng vậy – chọn ô chỉ để vui).
+ *   - Trả lời đúng: được đánh X/O vào ô đó. Trả lời sai: ô vẫn trống, lượt sau chọn lại được.
+ *   - Khi đã có đội thắng mà còn câu hỏi chưa dùng → bấm vào các ô trống để mở tiếp.
+ *   - Mỗi ván mới lại bắt đầu từ câu 1.
  */
 
 window.GAME_CONFIG = {
@@ -75,5 +82,22 @@ window.QUESTIONS = [
     question: "Con vật nào được gọi là \"chúa sơn lâm\"?",
     answer: "Con hổ",
     time: 10
+  },
+  {
+    question: "Trái Đất quay quanh Mặt Trời một vòng mất khoảng bao lâu?",
+    options: ["1 ngày", "1 tháng", "1 năm", "10 năm"],
+    answer: "C",
+    time: 15
+  },
+  {
+    question: "15 + 27 bằng bao nhiêu?",
+    answer: "42",
+    time: 15
+  },
+  {
+    question: "Loài chim nào không biết bay?",
+    options: ["Chim sẻ", "Đà điểu", "Chim én", "Đại bàng"],
+    answer: "B",
+    time: 15
   }
 ];
