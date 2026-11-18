@@ -1,0 +1,14 @@
+{
+  "name": "Đấu Trí X – O",
+  "short_name": "Đấu Trí X–O",
+  "description": "Trò chơi cờ X–O kết hợp trả lời câu hỏi cho 2 đội.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#1e1b4b",
+  "theme_color": "#1e1b4b",
+  "lang": "vi",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
