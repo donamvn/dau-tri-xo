@@ -60,87 +60,245 @@
     beep() { this.tone(660, 0.18, "square", 0, 0.1); },
     go() { this.tone(1320, 0.4, "square", 0, 0.1); },
     place() { this.tone(520, 0.12, "triangle", 0, 0.25); },
+    // Di chuột qua ô: mỗi ô một nốt (âm giai ngũ cung) cho vui tai
+    hover(i) {
+      const f = [523, 587, 659, 784, 880, 1047, 1175, 1319, 1568][i] || 660;
+      this.tone(f, 0.12, "sine", 0, 0.16);
+      this.tone(f * 2, 0.06, "triangle", 0.02, 0.04);
+    },
     correct() { [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.2, "triangle", i * 0.09, 0.22)); },
     wrong() { this.tone(220, 0.35, "sawtooth", 0, 0.12); this.tone(160, 0.5, "sawtooth", 0.18, 0.12); },
     timeup() { this.tone(330, 0.25, "square", 0, 0.12); this.tone(330, 0.5, "square", 0.3, 0.12); },
     fanfare() { [523, 659, 784, 1047, 784, 1047].forEach((f, i) => this.tone(f, 0.28, "triangle", i * 0.14, 0.22)); },
   };
 
-  /* ================= Nhạc nền cuộc đua (tự sáng tác, phát bằng WebAudio) ================= */
+  /* ================= Nhạc nền (tự sáng tác, phát bằng WebAudio – không cần file nhạc) =================
+   * Mỗi bài chia thành các nhịp 16 bước (nốt móc kép).
+   *   lead : chuỗi số MIDI, "-" = ngân tiếp nốt trước, "." = nghỉ
+   *   bass : nốt gốc của từng ô nhịp; bassPat: r = gốc, o = quãng 8, f = quãng 5, . = nghỉ
+   *   drums: k = trống cái, s = trống lẫy, h = hi-hat, t/c = tiếng đồng hồ tích/tắc
+   */
+  const SONGS = {
+    // Cuộc đua: giọng La thứ, nhịp dồn dập kiểu rượt đuổi
+    race: {
+      bpm: 138, fastBpm: 166, vol: 0.8,
+      leadType: "square", leadVol: 0.05,
+      lead:
+        "76 - 74 - 72 - 69 - 72 - 74 - 76 - - - " +
+        "77 - 76 - 74 - 72 - 69 - 72 - 77 - - - " +
+        "79 - 77 - 76 - 74 - 71 - 74 - 79 - 81 - " +
+        "80 - - - 76 - - - 71 - 76 - 80 - 83 - " +
+        "81 - 81 76 - 76 72 - 76 - 81 - 84 - - - " +
+        "84 - 83 - 81 - 77 - 81 - 77 - 72 - - - " +
+        "83 - 81 - 79 - 74 - 79 - 83 - 86 - 83 - " +
+        "80 - 83 - 84 - 83 - 80 - 76 - 71 - 68 - ",
+      bass: [45, 41, 43, 40, 45, 41, 43, 40],
+      bassPat: "rrorrrorrrorrror", bassVol: 0.13,
+      chords: [[57, 60, 64], [53, 57, 60], [55, 59, 62], [52, 56, 59]],
+      drums: { k: "x...x...x...x...", s: "....x.......x...", h: "..x...x...x...x." },
+      fill: true, // dồn trống ở cuối mỗi 4 ô nhịp
+    },
+    // Chọn ô: vui tươi, nhẹ nhàng (Đô trưởng, tiếng mộc cầm)
+    pick: {
+      bpm: 112, vol: 0.5,
+      leadType: "marimba", leadVol: 0.16,
+      lead:
+        "72 . 76 . 79 . 76 . 84 . 79 . 76 . 79 . " +
+        "72 . 76 . 81 . 76 . 84 . 81 . 76 . 81 . " +
+        "72 . 77 . 81 . 77 . 84 . 81 . 77 . 81 . " +
+        "71 . 74 . 79 . 74 . 83 . 79 . 77 . 74 . ",
+      bass: [48, 45, 41, 43],
+      bassPat: "r.......f.......", bassVol: 0.14,
+      drums: { k: "x.......x.......", h: "..x...x...x...x." },
+    },
+    // Đếm giờ: hồi hộp, tiếng đồng hồ tích tắc (Rê thứ)
+    timer: {
+      bpm: 104, fastBpm: 132, vol: 0.55,
+      leadType: "pluck", leadVol: 0.13,
+      lead:
+        "62 . 65 . 69 . 65 . 62 . 65 . 69 . 65 . " +
+        "62 . 65 . 69 . 70 . 69 . 65 . 64 . 65 . " +
+        "58 . 62 . 65 . 62 . 70 . 65 . 62 . 65 . " +
+        "57 . 61 . 64 . 61 . 69 . 67 . 64 . 61 . ",
+      bass: [50, 50, 46, 45],
+      bassPat: "r...r...r...r...", bassVol: 0.15,
+      drums: { t: "x.......x.......", c: "....x.......x..." },
+    },
+  };
+
+  // Chuyển chuỗi giai điệu thành mảng { m: nốt, len: số bước }
+  function parseLead(str) {
+    const tok = str.trim().split(/\s+/);
+    return tok.map((x, i) => {
+      if (x === "-" || x === ".") return null;
+      let len = 1;
+      while (tok[i + len] === "-") len++;
+      return { m: Number(x), len };
+    });
+  }
+  Object.values(SONGS).forEach((s) => (s.leadNotes = parseLead(s.lead)));
+
   const Music = {
-    // Mỗi ô là 1 nốt móc đơn; 0 = nghỉ. Số là cao độ MIDI.
-    melody: [
-      72, 0, 76, 79, 0, 76, 79, 81, 79, 0, 76, 0, 74, 76, 72, 0,
-      74, 0, 77, 81, 0, 77, 81, 83, 81, 0, 79, 0, 77, 79, 74, 0,
-      72, 0, 76, 79, 0, 76, 79, 84, 83, 81, 79, 77, 76, 0, 74, 0,
-      77, 76, 74, 72, 74, 76, 77, 79, 81, 79, 77, 76, 74, 0, 72, 0,
-    ],
-    bass: [48, 55, 52, 55, 48, 55, 52, 55, 50, 57, 53, 57, 50, 57, 53, 57,
-           48, 55, 52, 55, 48, 55, 52, 55, 43, 50, 47, 50, 43, 50, 47, 50],
-    bpm: 150,
+    current: null, // tên bài đang phát
+    song: null,
+    bpm: 120,
+    intense: false,
     step: 0,
     nextTime: 0,
     timer: null,
     out: null,
+    bassBus: null,
+    noise: null,
     freq: (m) => 440 * Math.pow(2, (m - 69) / 12),
 
-    note(m, t, dur, type, vol) {
+    noiseBuffer() {
+      if (this.noise) return this.noise;
       const ctx = Sound.ctx;
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = type;
-      o.frequency.setValueAtTime(this.freq(m), t);
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.linearRampToValueAtTime(vol, t + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      o.connect(g).connect(this.out);
-      o.start(t);
-      o.stop(t + dur + 0.02);
+      const buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      return (this.noise = buf);
     },
 
-    drum(t, accent) {
+    note(m, t, dur, type, vol, dest) {
       const ctx = Sound.ctx;
       const o = ctx.createOscillator();
       const g = ctx.createGain();
-      o.type = "sine";
-      o.frequency.setValueAtTime(accent ? 150 : 900, t);
-      o.frequency.exponentialRampToValueAtTime(accent ? 40 : 600, t + 0.08);
-      g.gain.setValueAtTime(accent ? 0.35 : 0.04, t);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + (accent ? 0.15 : 0.04));
-      o.connect(g).connect(this.out);
+      const pluck = type === "marimba" || type === "pluck";
+      o.type = type === "marimba" ? "sine" : type === "pluck" ? "triangle" : type;
+      o.frequency.setValueAtTime(this.freq(m), t);
+      const end = pluck ? t + Math.min(dur, type === "marimba" ? 0.45 : 0.3) : t + dur;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(vol, t + 0.006);
+      if (!pluck) g.gain.setValueAtTime(vol, Math.max(t + 0.006, end - 0.04));
+      g.gain.exponentialRampToValueAtTime(0.0001, end);
+      o.connect(g).connect(dest || this.out);
       o.start(t);
-      o.stop(t + 0.2);
+      o.stop(end + 0.02);
+      if (type === "marimba") this.note(m + 24, t, 0.08, "sine", vol * 0.25, dest); // tiếng gõ sáng
+    },
+
+    noiseHit(t, dur, vol, filterType, freq) {
+      const ctx = Sound.ctx;
+      const src = ctx.createBufferSource();
+      src.buffer = this.noiseBuffer();
+      const f = ctx.createBiquadFilter();
+      f.type = filterType;
+      f.frequency.value = freq;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(vol, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      src.connect(f).connect(g).connect(this.out);
+      src.start(t);
+      src.stop(t + dur + 0.02);
+    },
+
+    drum(kind, t, vol) {
+      const ctx = Sound.ctx;
+      if (kind === "k") {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.frequency.setValueAtTime(150, t);
+        o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
+        g.gain.setValueAtTime(0.5 * vol, t);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+        o.connect(g).connect(this.out);
+        o.start(t);
+        o.stop(t + 0.25);
+      } else if (kind === "s") {
+        this.noiseHit(t, 0.14, 0.22 * vol, "highpass", 1400);
+        this.note(55, t, 0.07, "triangle", 0.12 * vol);
+      } else if (kind === "h") {
+        this.noiseHit(t, 0.035, 0.07 * vol, "highpass", 7000);
+      } else if (kind === "t" || kind === "c") {
+        // tiếng mõ gỗ: tích (cao) – tắc (thấp)
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = "sine";
+        o.frequency.setValueAtTime(kind === "t" ? 1750 : 1250, t);
+        g.gain.setValueAtTime(0.13 * vol, t);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+        o.connect(g).connect(this.out);
+        o.start(t);
+        o.stop(t + 0.06);
+      }
+    },
+
+    playStep(s, t, stepDur) {
+      const song = this.song;
+      const bar = Math.floor(s / 16);
+      const pos = s % 16;
+
+      // Giai điệu
+      const n = song.leadNotes[s % song.leadNotes.length];
+      if (n) this.note(n.m, t, n.len * stepDur * 0.92, song.leadType, song.leadVol);
+
+      // Bè trầm
+      const root = song.bass[bar % song.bass.length];
+      const p = song.bassPat[pos];
+      if (p !== ".") {
+        let len = 1;
+        while (len < 16 && song.bassPat[(pos + len) % 16] === ".") len++;
+        const m = root + (p === "o" ? 12 : p === "f" ? 7 : 0);
+        this.note(m, t, len * stepDur * 0.9, "sawtooth", song.bassVol, this.bassBus);
+      }
+
+      // Hợp âm nhấn đầu ô nhịp
+      if (song.chords && pos === 0) {
+        song.chords[bar % song.chords.length].forEach((m) =>
+          this.note(m, t, stepDur * 3, "sawtooth", 0.028, this.bassBus)
+        );
+      }
+
+      // Trống
+      const fillBar = song.fill && bar % 4 === 3 && pos >= 12;
+      for (const kind in song.drums) {
+        if (song.drums[kind][pos] === "x") this.drum(kind, t, 1);
+      }
+      if (fillBar) this.drum("s", t, 0.7 + (pos - 12) * 0.12);
+      if (this.intense && song.drums.h && song.drums.h[pos] !== "x") this.drum("h", t, 0.6);
     },
 
     schedule() {
       const ctx = Sound.ctx;
-      const stepDur = 60 / this.bpm / 2; // móc đơn
       while (this.nextTime < ctx.currentTime + 0.12) {
-        const s = this.step;
-        const m = this.melody[s % this.melody.length];
-        if (m) this.note(m, this.nextTime, stepDur * 0.9, "square", 0.05);
-        if (s % 2 === 0) this.note(this.bass[(s / 2) % this.bass.length], this.nextTime, stepDur * 1.6, "triangle", 0.16);
-        this.drum(this.nextTime, s % 4 === 0);
+        const stepDur = 60 / this.bpm / 4; // móc kép
+        this.playStep(this.step, this.nextTime, stepDur);
         this.nextTime += stepDur;
         this.step++;
       }
     },
 
-    start() {
-      if (!Sound.on || this.timer) return;
+    play(name) {
+      if (!Sound.on || !SONGS[name]) return;
+      if (this.current === name) return;
+      this.stop();
       const ctx = Sound.ensure();
       if (!ctx) return;
+      this.song = SONGS[name];
+      this.current = name;
+      this.bpm = this.song.bpm;
+      this.intense = false;
       this.out = ctx.createGain();
-      this.out.gain.value = 0.8;
+      this.out.gain.setValueAtTime(0.0001, ctx.currentTime);
+      this.out.gain.linearRampToValueAtTime(this.song.vol, ctx.currentTime + 0.15);
       this.out.connect(ctx.destination);
-      this.bpm = 150;
+      this.bassBus = ctx.createBiquadFilter();
+      this.bassBus.type = "lowpass";
+      this.bassBus.frequency.value = 1100;
+      this.bassBus.connect(this.out);
       this.step = 0;
       this.nextTime = ctx.currentTime + 0.05;
       this.timer = setInterval(() => this.schedule(), 25);
       this.schedule();
     },
 
-    faster() { this.bpm = 185; }, // dồn nhịp khi gần về đích
+    // Dồn nhịp: gần về đích / sắp hết giờ
+    faster() {
+      if (!this.song || this.intense) return;
+      this.intense = true;
+      if (this.song.fastBpm) this.bpm = this.song.fastBpm;
+    },
 
     stop() {
       if (!this.timer) return;
@@ -149,10 +307,14 @@
       const out = this.out;
       const ctx = Sound.ctx;
       if (out && ctx) {
+        out.gain.cancelScheduledValues(ctx.currentTime);
         out.gain.setTargetAtTime(0, ctx.currentTime, 0.05);
         setTimeout(() => out.disconnect(), 400);
       }
       this.out = null;
+      this.bassBus = null;
+      this.current = null;
+      this.song = null;
     },
   };
 
@@ -240,12 +402,13 @@
   /* ================= Cuộc đua chọn đội trả lời trước ================= */
   let raceRunning = false;
   let raceWinner = null;
+  let raceSprint = false;
 
   function resetRace() {
     raceRunning = false;
     raceWinner = null;
-    Music.stop();
     $("track").classList.remove("running");
+    syncMusic();
     ["X", "O"].forEach((t) => {
       const el = $("racer-" + t);
       el.style.transform = "translateX(0)";
@@ -280,7 +443,6 @@
         if (i < steps.length - 1) Sound.beep();
         else {
           Sound.go();
-          Music.start();
           runRace();
           setTimeout(() => (cd.textContent = ""), 600);
         }
@@ -300,9 +462,10 @@
     const dist = finish.offsetLeft + finish.offsetWidth / 2 - startLeft - width;
 
     $("track").classList.add("running"); // cho cây cối, đồi núi chạy
+    syncMusic();
     const res = $("race-result");
     let leader = null;
-    let sprint = false;
+    raceSprint = false;
     let last = performance.now();
     let elapsed = 0;
 
@@ -312,9 +475,17 @@
       elapsed += dt;
       for (const r of racers) {
         if (elapsed >= r.nextChange) {
-          const boost = Math.random() < 0.12; // thỉnh thoảng tăng tốc bất ngờ
-          r.speed = boost ? rand(0.17, 0.23) : rand(0.06, 0.14); // ~9–10 giây mới về đích
-          r.nextChange = elapsed + rand(0.4, 1.0);
+          const roll = Math.random();
+          if (roll < 0.12) {
+            r.speed = rand(0.13, 0.18); // tăng tốc bất ngờ
+            r.nextChange = elapsed + rand(0.5, 1.0);
+          } else if (roll < 0.18 && r.pos > 0.15) {
+            r.speed = rand(0.01, 0.025); // hụt hơi một chút
+            r.nextChange = elapsed + rand(0.4, 0.7);
+          } else {
+            r.speed = rand(0.04, 0.095); // ~13–14 giây mới về đích
+            r.nextChange = elapsed + rand(0.4, 1.0);
+          }
         }
         r.pos += r.speed * dt;
         r.el.style.transform = "translateX(" + Math.min(r.pos, 1) * dist + "px)";
@@ -323,15 +494,15 @@
       // Bình luận trực tiếp: ai đang dẫn trước
       const [a, b] = racers;
       const lead = Math.abs(a.pos - b.pos) < 0.015 ? null : a.pos > b.pos ? a.t : b.t;
-      if (!sprint && Math.max(a.pos, b.pos) > 0.8) {
-        sprint = true; // sắp về đích: nhạc dồn nhịp, đổi lời bình
+      if (!raceSprint && Math.max(a.pos, b.pos) > 0.8) {
+        raceSprint = true; // sắp về đích: nhạc dồn nhịp, đổi lời bình
         Music.faster();
         leader = null;
       }
       if (elapsed > 1 && lead && lead !== leader) {
         leader = lead;
         res.className = "race-result live " + lead.toLowerCase();
-        res.textContent = (sprint ? "⚡ Nước rút! " : "🔥 ") + state.names[lead] + " đang dẫn trước!";
+        res.textContent = (raceSprint ? "⚡ Nước rút! " : "🔥 ") + state.names[lead] + " đang dẫn trước!";
       }
       const done = racers.filter((r) => r.pos >= 1);
       if (done.length) {
@@ -346,8 +517,8 @@
 
   function endRace(winner, racers) {
     raceWinner = winner;
-    Music.stop();
     $("track").classList.remove("running");
+    syncMusic();
     racers.forEach((r) => r.el.classList.remove("running"));
     $("racer-" + winner).classList.add("winner");
     const res = $("race-result");
@@ -491,30 +662,48 @@
       state.mode === "bonus" ? null : state.turn
     );
     const t = Number(q.time) > 0 ? Number(q.time) : CONFIG.defaultTime;
-    startTimer(t);
+    prepareTimer(t); // chờ người dẫn bấm "Bắt đầu tính giờ"
+    syncMusic();
     scrollToEl(document.querySelector(".question-card"), "start");
   }
 
   /* ================= Đồng hồ đếm ngược ================= */
-  const T = { total: 0, remaining: 0, running: false, handle: null, last: 0, lastWhole: 0 };
+  const T = { total: 0, remaining: 0, running: false, started: false, hurried: false, handle: null, last: 0, lastWhole: 0 };
 
-  function startTimer(sec) {
+  // Hiện câu hỏi: đặt sẵn số giây nhưng CHƯA chạy
+  function prepareTimer(sec) {
     stopTimer();
     T.total = sec;
     T.remaining = sec;
     T.lastWhole = Math.ceil(sec);
+    T.started = false;
+    T.hurried = false;
+    $("btn-start-timer").classList.remove("hidden");
+    $("btn-pause").disabled = true;
+    $("btn-pause").textContent = "⏸ Tạm dừng";
+    renderTimer();
+  }
+
+  // Người dẫn bấm "Bắt đầu tính giờ"
+  function startTimer() {
+    if (state.phase !== "asking" || T.started) return;
+    T.started = true;
     T.last = performance.now();
     T.running = true;
     T.handle = setInterval(tickTimer, 100);
+    $("btn-start-timer").classList.add("hidden");
     $("btn-pause").disabled = false;
-    $("btn-pause").textContent = "⏸ Tạm dừng";
+    Sound.go();
     renderTimer();
+    syncMusic();
   }
 
   function stopTimer() {
     T.running = false;
     clearInterval(T.handle);
     T.handle = null;
+    $("btn-start-timer").classList.add("hidden");
+    syncMusic();
   }
 
   function tickTimer() {
@@ -526,6 +715,10 @@
     if (whole < T.lastWhole) {
       T.lastWhole = whole;
       if (whole > 0 && whole <= 5) Sound.tick();
+    }
+    if (!T.hurried && T.remaining <= 10 && T.total > 10) {
+      T.hurried = true;
+      Music.faster(); // 10 giây cuối: nhạc dồn dập hơn
     }
     if (T.remaining <= 0) {
       stopTimer();
@@ -542,7 +735,7 @@
   }
 
   function togglePause() {
-    if (T.remaining <= 0 || state.phase !== "asking") return;
+    if (T.remaining <= 0 || state.phase !== "asking" || !T.started) return;
     if (T.running) {
       T.running = false;
       $("btn-pause").textContent = "▶ Tiếp tục";
@@ -552,6 +745,7 @@
       $("btn-pause").textContent = "⏸ Tạm dừng";
     }
     renderTimer();
+    syncMusic();
   }
 
   function renderTimer() {
@@ -563,7 +757,29 @@
     fill.classList.toggle("low", pct <= 20);
     text.textContent = T.remaining <= 0 ? "⏰ Hết giờ!" : Math.ceil(T.remaining) + " giây";
     text.classList.toggle("low", T.remaining > 0 && T.remaining <= 5 && T.running);
-    text.classList.toggle("paused", !T.running && T.remaining > 0);
+    text.classList.toggle("paused", T.started && !T.running && T.remaining > 0);
+    text.classList.toggle("waiting", !T.started);
+  }
+
+  /* ================= Chọn nhạc nền theo tình huống =================
+   * Đua: nhạc rượt đuổi · Chọn ô: nhạc vui · Đang đếm giờ: nhạc hồi hộp
+   * Lúc mới hiện câu hỏi (chưa bấm tính giờ), tạm dừng, xem kết quả: im lặng */
+  function wantedMusic() {
+    if ($("track").classList.contains("running")) return "race";
+    if (!$("screen-game").classList.contains("active")) return null;
+    if (state.phase === "pick") return "pick";
+    if (state.phase === "asking" && T.running) return "timer";
+    return null;
+  }
+
+  function syncMusic() {
+    const want = Sound.on ? wantedMusic() : null;
+    if (want === Music.current) return;
+    Music.stop();
+    if (!want) return;
+    Music.play(want);
+    if (want === "timer" && T.hurried) Music.faster();
+    if (want === "race" && raceSprint) Music.faster();
   }
 
   /* ================= Chọn ô → trả lời câu hỏi ================= */
@@ -604,6 +820,19 @@
       setHint("👉 " + state.names[state.turn] + " hãy chọn 1 ô", state.turn);
     }
     scrollToEl(document.querySelector(".board-card"), "center");
+    syncMusic(); // nhạc nền lúc chọn ô
+  }
+
+  // Di chuột qua ô trống lúc đang chọn → kêu "ting"
+  let lastHover = -1;
+  function onCellHover(e) {
+    if (e.pointerType === "touch") return;
+    const cell = e.target.closest(".cell");
+    const i = cell ? Number(cell.dataset.i) : -1;
+    if (i === lastHover) return;
+    lastHover = i;
+    if (i < 0 || state.phase !== "pick" || state.board[i]) return;
+    Sound.hover(i);
   }
 
   function onCellClick(e) {
@@ -615,6 +844,7 @@
     state.phase = "opening";
     $("board").className = "board";
     cell.classList.add("selected", "sel-" + (state.mode === "bonus" ? "bonus" : state.turn));
+    syncMusic(); // vào câu hỏi thì tắt nhạc
     Sound.place();
     setTimeout(showQuestion, 450);
   }
@@ -818,6 +1048,10 @@
     $("btn-next-turn").addEventListener("click", onNextClick);
     $("btn-bonus").addEventListener("click", startBonus);
     $("board").addEventListener("click", onCellClick);
+    $("board").addEventListener("pointerover", onCellHover);
+    $("board").addEventListener("pointerleave", () => (lastHover = -1));
+    $("btn-start-timer").addEventListener("click", startTimer);
+    setInterval(syncMusic, 300); // phòng hờ: luôn giữ đúng nhạc theo tình huống
 
     const pickFromEvent = (e) => {
       const li = e.target.closest("li[data-i]");
@@ -841,12 +1075,8 @@
     $("btn-sound").addEventListener("click", () => {
       Sound.on = !Sound.on;
       $("btn-sound").textContent = Sound.on ? "🔊" : "🔇";
-      if (Sound.on) {
-        Sound.ensure();
-        if ($("track").classList.contains("running")) Music.start();
-      } else {
-        Music.stop();
-      }
+      if (Sound.on) Sound.ensure();
+      syncMusic();
     });
   }
 

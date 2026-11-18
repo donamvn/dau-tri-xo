@@ -357,7 +357,29 @@ main {
   display: grid;
   place-items: center;
   transition: background .15s, transform .15s;
+  position: relative;
 }
+/* Số thứ tự ô (1–9): ô trống hiện số to ở giữa, ô đã đánh hiện số nhỏ ở góc */
+.cell::before {
+  content: attr(data-n);
+  position: absolute;
+  top: 6px; left: 10px;
+  font-size: clamp(.9rem, 2.2vh, 1.3rem);
+  color: #9ca3af;
+  line-height: 1;
+  pointer-events: none;
+  transition: color .15s, transform .15s;
+}
+.cell:empty:not(.selected)::before {
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: .55em;
+  color: #cbd5e1;
+}
+.board.pick-X .cell:empty:not(.selected)::before,
+.board.pick-O .cell:empty:not(.selected)::before,
+.board.pick-bonus .cell:empty:not(.selected)::before { color: #94a3b8; }
 .cell.X { color: var(--x); background: var(--x-soft); box-shadow: inset 0 -5px 0 #fecaca; }
 .cell.O { color: var(--o); background: var(--o-soft); box-shadow: inset 0 -5px 0 #bfdbfe; }
 .cell.placed { animation: place .35s ease-out; }
@@ -416,6 +438,9 @@ main {
 .timer-fill { height: 100%; width: 100%; background: var(--success); border-radius: 999px; transition: width .1s linear, background .3s; }
 .timer-fill.mid { background: var(--warn); }
 .timer-fill.low { background: var(--danger); }
+.timer-text.waiting { color: var(--muted); }
+.btn.start-timer { align-self: center; animation: startpulse 1s ease-in-out infinite alternate; }
+@keyframes startpulse { from { box-shadow: 0 0 0 0 rgba(124,58,237,.55); } to { box-shadow: 0 0 0 10px rgba(124,58,237,0); } }
 
 .q-text { font-size: clamp(1.4rem, 2.6vw, 2.1rem); font-weight: 700; line-height: 1.35; }
 .q-image { max-width: 100%; max-height: 260px; object-fit: contain; border-radius: 12px; align-self: center; }
@@ -513,9 +538,13 @@ main {
   -webkit-user-select: none;
 }
 @media (hover: hover) {
-  .board.pick-X .cell:empty:hover::after { content: "X"; color: var(--x); opacity: .45; }
-  .board.pick-O .cell:empty:hover::after { content: "O"; color: var(--o); opacity: .45; }
-  .board.pick-bonus .cell:empty:hover::after { content: "?"; color: #7c3aed; opacity: .5; }
+  /* Di chuột vào ô trống: số ô sáng lên theo màu đội */
+  .board.pick-X .cell:empty:hover::before { color: var(--x); transform: scale(1.25); }
+  .board.pick-O .cell:empty:hover::before { color: var(--o); transform: scale(1.25); }
+  .board.pick-bonus .cell:empty:hover::before { color: #7c3aed; transform: scale(1.25); }
+  .board.pick-X .cell:empty:hover,
+  .board.pick-O .cell:empty:hover,
+  .board.pick-bonus .cell:empty:hover { transform: translateY(-3px); }
 }
 
 /* ---------- Máy tính bảng / điện thoại ngang ---------- */

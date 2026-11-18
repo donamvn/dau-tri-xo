@@ -91,15 +91,15 @@
       <div class="game-layout">
         <div class="card board-card">
           <div class="board" id="board">
-            <button class="cell" data-i="0"></button>
-            <button class="cell" data-i="1"></button>
-            <button class="cell" data-i="2"></button>
-            <button class="cell" data-i="3"></button>
-            <button class="cell" data-i="4"></button>
-            <button class="cell" data-i="5"></button>
-            <button class="cell" data-i="6"></button>
-            <button class="cell" data-i="7"></button>
-            <button class="cell" data-i="8"></button>
+            <button class="cell" data-i="0" data-n="1" aria-label="Ô số 1"></button>
+            <button class="cell" data-i="1" data-n="2" aria-label="Ô số 2"></button>
+            <button class="cell" data-i="2" data-n="3" aria-label="Ô số 3"></button>
+            <button class="cell" data-i="3" data-n="4" aria-label="Ô số 4"></button>
+            <button class="cell" data-i="4" data-n="5" aria-label="Ô số 5"></button>
+            <button class="cell" data-i="5" data-n="6" aria-label="Ô số 6"></button>
+            <button class="cell" data-i="6" data-n="7" aria-label="Ô số 7"></button>
+            <button class="cell" data-i="7" data-n="8" aria-label="Ô số 8"></button>
+            <button class="cell" data-i="8" data-n="9" aria-label="Ô số 9"></button>
           </div>
           <p class="board-hint" id="board-hint"></p>
         </div>
@@ -120,6 +120,7 @@
               <span class="timer-text" id="timer-text"></span>
             </div>
             <div class="timer-bar"><div class="timer-fill" id="timer-fill"></div></div>
+            <button id="btn-start-timer" class="btn primary big start-timer">▶ Bắt đầu tính giờ</button>
             <div class="q-text" id="q-text"></div>
             <img class="q-image hidden" id="q-image" alt="">
             <ol class="q-options" id="q-options" type="A"></ol>
