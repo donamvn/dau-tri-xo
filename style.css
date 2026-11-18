@@ -344,6 +344,25 @@ main {
 }
 .q-options li::before { content: counter(opt, upper-alpha) ". "; font-weight: 800; color: #7c3aed; }
 .q-options li.correct { background: #dcfce7; outline: 3px solid var(--success); }
+.q-options.choosable li {
+  cursor: pointer;
+  background: #ede9fe;
+  box-shadow: 0 4px 0 #c4b5fd;
+  transition: transform .08s, box-shadow .08s, background .15s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.q-options.choosable li:active { transform: translateY(3px); box-shadow: 0 1px 0 #c4b5fd; }
+.q-options.choosable li:focus-visible { outline: 3px solid #7c3aed; }
+@media (hover: hover) {
+  .q-options.choosable li:hover { background: #ddd6fe; }
+}
+.q-options li.chosen-wrong { background: #fee2e2; outline: 3px solid var(--danger); animation: shake .4s; }
+.q-options li.correct { animation: winpop .4s ease-in-out 2 alternate; }
+@keyframes shake { 25% { transform: translateX(-8px); } 50% { transform: translateX(8px); } 75% { transform: translateX(-4px); } }
+.auto-hint { margin: 0; text-align: center; color: #7c3aed; font-weight: 700; font-size: 1.05rem; }
 .q-answer {
   background: #dcfce7;
   border-radius: 12px;

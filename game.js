@@ -266,6 +266,9 @@
     return q.options.findIndex((o) => String(o).trim().toUpperCase() === a);
   }
 
+  // Câu trắc nghiệm có đáp án rõ ràng → máy tự chấm khi bấm vào lựa chọn
+  const isAuto = (q) => !!q && correctOptionIndex(q) >= 0;
+
   function answerText(q) {
     if (q.answer === undefined || q.answer === null || q.answer === "") return "";
     const idx = correctOptionIndex(q);
@@ -286,27 +289,64 @@
       img.classList.add("hidden");
     }
 
+    const auto = isAuto(q);
     const list = $("q-options");
     list.innerHTML = "";
     if (Array.isArray(q.options) && q.options.length) {
-      q.options.forEach((o) => {
+      q.options.forEach((o, i) => {
         const li = document.createElement("li");
         li.textContent = o;
+        li.dataset.i = i;
+        if (auto) {
+          li.setAttribute("role", "button");
+          li.tabIndex = 0;
+        }
         list.appendChild(li);
       });
       list.classList.remove("hidden");
     } else {
       list.classList.add("hidden");
     }
+    list.classList.toggle("choosable", auto);
+    // Câu trắc nghiệm: ẩn nút Đúng/Sai vì máy tự chấm; câu tự luận: người dẫn chấm
+    document.querySelector(".judge").classList.toggle("hidden", auto);
+    $("auto-hint").classList.toggle("hidden", !auto);
 
     const ans = $("q-answer");
     ans.textContent = "";
     ans.classList.add("hidden");
   }
 
+  function pickOption(idx) {
+    const q = state.current;
+    if (state.phase !== "asking" || !isAuto(q) || state.revealed) return;
+    const correct = correctOptionIndex(q);
+    const ok = idx === correct;
+    state.phase = "checking";
+    stopTimer();
+    $("btn-pause").disabled = true;
+    $("q-options").classList.remove("choosable");
+    $("auto-hint").classList.add("hidden");
+    const items = $("q-options").children;
+    if (idx >= 0) {
+      items[idx].classList.add(ok ? "correct" : "chosen-wrong");
+      if (ok) Sound.correct();
+      else Sound.wrong();
+    }
+    if (!ok) setTimeout(() => items[correct].classList.add("correct"), 500);
+    setTimeout(() => judge(ok, { silent: true, timeout: idx < 0 }), 1600);
+  }
+
   function revealAnswer() {
     const q = state.current;
     if (!q) return;
+    if (state.phase === "asking") {
+      // Đã lộ đáp án thì không cho bấm chọn nữa – người dẫn tự chấm bằng nút Đúng/Sai
+      state.revealed = true;
+      $("q-options").classList.remove("choosable");
+      $("auto-hint").classList.add("hidden");
+      document.querySelector(".judge").classList.remove("hidden");
+    }
     const ans = $("q-answer");
     ans.textContent = answerText(q) || "(Câu này chưa có đáp án trong file)";
     ans.classList.remove("hidden");
@@ -322,6 +362,7 @@
     }
     if (!isSkip) state.qCount++;
     state.current = q;
+    state.revealed = false;
     state.phase = "asking";
     renderQuestion(q);
     setPhase("asking");
@@ -367,6 +408,12 @@
       stopTimer();
       Sound.timeup();
       $("btn-pause").disabled = true;
+      // Câu trắc nghiệm hết giờ mà chưa chọn → tự tính là sai
+      if (isAuto(state.current) && !state.revealed) {
+        renderTimer();
+        pickOption(-1);
+        return;
+      }
     }
     renderTimer();
   }
@@ -401,15 +448,16 @@
   }
 
   /* ================= Chấm điểm ================= */
-  function judge(isCorrect) {
-    if (state.phase !== "asking") return;
+  function judge(isCorrect, opts) {
+    opts = opts || {};
+    if (state.phase !== "asking" && state.phase !== "checking") return;
     stopTimer();
     const team = state.turn;
     $("result-answer").textContent = answerText(state.current);
     setPhase("result");
 
     if (isCorrect) {
-      Sound.correct();
+      if (!opts.silent) Sound.correct();
       state.phase = "place";
       $("result-msg").textContent = "✓ Chính xác!";
       $("result-msg").style.color = "var(--success)";
@@ -418,9 +466,9 @@
       setHint("👉 " + state.names[team] + " hãy chọn 1 ô để đánh " + team, team);
       scrollToEl(document.querySelector(".board-card"), "center");
     } else {
-      Sound.wrong();
+      if (!opts.silent) Sound.wrong();
       state.phase = "result";
-      $("result-msg").textContent = "✗ Chưa đúng rồi!";
+      $("result-msg").textContent = opts.timeout ? "⏰ Hết giờ rồi!" : "✗ Chưa đúng rồi!";
       $("result-msg").style.color = "var(--danger)";
       const btn = $("btn-next-turn");
       btn.textContent = "Chuyển lượt cho " + state.names[other(team)] + " ▶";
@@ -547,6 +595,17 @@
       if (state.phase === "asking") showQuestion(true);
     });
     $("btn-next-turn").addEventListener("click", nextTurn);
+    const pickFromEvent = (e) => {
+      const li = e.target.closest("li[data-i]");
+      if (li) pickOption(Number(li.dataset.i));
+    };
+    $("q-options").addEventListener("click", pickFromEvent);
+    $("q-options").addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        pickFromEvent(e);
+      }
+    });
     $("board").addEventListener("click", onCellClick);
 
     $("btn-new-round").addEventListener("click", () => {
