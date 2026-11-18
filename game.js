@@ -221,7 +221,7 @@
   function initSetup() {
     const info = $("question-info");
     if (QUESTIONS.length) {
-      info.textContent = "Đã nạp " + QUESTIONS.length + " câu hỏi từ file questions.js.";
+      info.textContent = "";
     } else {
       info.textContent = "⚠ Chưa có câu hỏi nào! Hãy thêm câu hỏi vào file questions.js.";
       info.style.color = "var(--danger)";
@@ -400,9 +400,7 @@
   }
 
   function renderQuestion(q) {
-    $("q-number").textContent =
-      (state.mode === "bonus" ? "⭐ Câu hỏi thêm · " : "") +
-      "Câu hỏi số " + state.qPos;
+    $("q-number").textContent = state.mode === "bonus" ? "⭐ Câu hỏi thêm" : "";
     $("q-text").textContent = q.question;
 
     const img = $("q-image");
