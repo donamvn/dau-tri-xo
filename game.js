@@ -402,7 +402,7 @@
   function renderQuestion(q) {
     $("q-number").textContent =
       (state.mode === "bonus" ? "⭐ Câu hỏi thêm · " : "") +
-      "Câu " + state.qPos + "/" + state.order.length;
+      "Câu hỏi số " + state.qPos;
     $("q-text").textContent = q.question;
 
     const img = $("q-image");
@@ -578,7 +578,7 @@
     btn.textContent = nextLabel;
     btn.classList.toggle("hidden", !nextLabel);
     $("btn-bonus").classList.toggle("hidden", !showBonus);
-    $("btn-bonus").textContent = "⭐ Mở " + remainingQuestions() + " câu hỏi còn lại";
+    $("btn-bonus").textContent = "⭐ Mở các câu hỏi còn lại";
   }
 
   // Chờ đội (hoặc cả lớp, ở phần câu hỏi thêm) chọn 1 ô trống
@@ -596,7 +596,6 @@
     state.phase = "pick";
     $("board").className = "board pick-" + (state.mode === "bonus" ? "bonus" : state.turn);
     setPhase("ready");
-    const left = remainingQuestions();
     if (state.mode === "bonus") {
       $("ready-msg").textContent = "Chọn 1 ô còn trống để mở câu hỏi";
       $("ready-msg").style.color = "#7c3aed";
@@ -606,8 +605,6 @@
       $("ready-msg").style.color = state.turn === "X" ? "var(--x)" : "var(--o)";
       setHint("👉 " + state.names[state.turn] + " hãy chọn 1 ô", state.turn);
     }
-    $("ready-sub").textContent =
-      "Câu hỏi tiếp theo: câu " + (state.qPos + 1) + "/" + state.order.length + " · còn " + left + " câu";
     scrollToEl(document.querySelector(".board-card"), "center");
   }
 
@@ -655,7 +652,7 @@
       $("result-sub").textContent = "";
       if (canOpenBonus()) {
         setResultButtons("Mở câu tiếp theo ▶", false);
-        setHint("Còn " + remainingQuestions() + " câu hỏi chưa mở", null);
+        setHint("👉 Bấm vào 1 ô còn trống để mở câu tiếp theo", null);
       } else {
         endBonus();
       }
@@ -712,12 +709,12 @@
     $("overlay-sub").textContent = sub;
     const bonus = canOpenBonus();
     $("btn-open-bonus").classList.toggle("hidden", !bonus);
-    $("btn-open-bonus").textContent = "⭐ Mở " + remainingQuestions() + " câu hỏi còn lại";
+    $("btn-open-bonus").textContent = "⭐ Mở các câu hỏi còn lại";
   }
 
   function bonusNote() {
     return canOpenBonus()
-      ? " Còn " + remainingQuestions() + " câu hỏi chưa dùng – có thể bấm vào các ô trống để mở tiếp."
+      ? " Vẫn còn câu hỏi chưa dùng – có thể bấm vào các ô trống để mở tiếp."
       : "";
   }
 
@@ -759,7 +756,7 @@
     $("result-msg").style.color = "";
     $("result-answer").textContent = "";
     $("result-sub").textContent = "Chưa đội nào xếp được 3 ô thẳng hàng – ván này hòa.";
-    setHint("Đã dùng hết " + state.order.length + " câu hỏi.", null);
+    setHint("Đã dùng hết câu hỏi.", null);
     setResultButtons("Ván mới (đua lại) 🏁", false);
     showOverlay("📋", "", "Đã hết câu hỏi!", "Chưa đội nào xếp được 3 ô thẳng hàng – ván này hòa.");
     Sound.beep();
@@ -785,7 +782,7 @@
     }
     $("result-sub").textContent = noQ
       ? "🎉 Đã mở hết các câu hỏi!"
-      : "Bàn cờ đã kín ô – còn " + remainingQuestions() + " câu chưa dùng.";
+      : "Bàn cờ đã kín ô.";
     setHint(noQ ? "Đã mở hết các câu hỏi." : "Không còn ô trống.", null);
     setResultButtons("Ván mới (đua lại) 🏁", false);
   }
