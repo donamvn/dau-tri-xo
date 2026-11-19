@@ -755,7 +755,10 @@
     fill.style.width = pct + "%";
     fill.classList.toggle("mid", pct <= 50 && pct > 20);
     fill.classList.toggle("low", pct <= 20);
-    text.textContent = T.remaining <= 0 ? "⏰ Hết giờ!" : Math.ceil(T.remaining) + " giây";
+    const s = Math.ceil(T.remaining);
+    text.textContent = T.remaining <= 0 ? "⏰ Hết giờ!"
+      : s >= 60 ? Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0") // vd 1:30
+      : s + " giây";
     text.classList.toggle("low", T.remaining > 0 && T.remaining <= 5 && T.running);
     text.classList.toggle("paused", T.started && !T.running && T.remaining > 0);
     text.classList.toggle("waiting", !T.started);
