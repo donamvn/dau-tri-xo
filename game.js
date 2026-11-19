@@ -39,7 +39,7 @@
         if (AC) this.ctx = new AC();
       }
       if (this.ctx && this.ctx.state === "suspended") this.ctx.resume();
-      if (this.ctx) RaceTrack.decode(); // giải mã sẵn nhạc đua ngay khi có thể
+      if (this.ctx) Object.values(Tracks).forEach((t) => t.decode()); // giải mã sẵn nhạc mp3 ngay khi có thể
       return this.ctx;
     },
     tone(freq, dur, type = "sine", delay = 0, vol = 0.2) {
@@ -276,8 +276,9 @@
       this.stop();
       const ctx = Sound.ensure();
       if (!ctx) return;
-      // Cuộc đua: ưu tiên bản nhạc mp3; chưa tải xong thì dùng nhạc tự tạo
-      if (name === "race" && RaceTrack.ready()) return this.playFile(ctx);
+      // Đua / đếm giờ: ưu tiên bản nhạc mp3; chưa tải xong thì dùng nhạc tự tạo
+      const track = Tracks[name];
+      if (track && track.ready()) return this.playFile(ctx, name, track);
       this.song = SONGS[name];
       this.current = name;
       this.bpm = this.song.bpm;
@@ -303,23 +304,30 @@
       if (this.song.fastBpm) this.bpm = this.song.fastBpm;
     },
 
-    playFile(ctx) {
-      this.current = "race";
-      if (RaceTrack.buffer) {
+    playFile(ctx, name, track) {
+      this.current = name;
+      this.fileTrack = track;
+      // Nhạc đếm giờ phát tiếp từ chỗ đang dở (sau khi tạm dừng); nhạc đua luôn phát từ đầu
+      const pos = track.resume ? track.pos : 0;
+      if (track.buffer) {
         const g = ctx.createGain();
-        g.gain.value = RaceTrack.volume;
+        g.gain.setValueAtTime(0.0001, ctx.currentTime);
+        g.gain.linearRampToValueAtTime(track.volume, ctx.currentTime + (pos ? 0.3 : 0.02));
         g.connect(ctx.destination);
         const src = ctx.createBufferSource();
-        src.buffer = RaceTrack.buffer;
+        src.buffer = track.buffer;
+        src.loop = !!track.loop;
         src.connect(g);
-        src.start();
+        src.start(0, pos % track.buffer.duration);
+        track.startedAt = ctx.currentTime - pos;
         this.fileSrc = src;
         this.fileGain = g;
       } else {
-        const el = RaceTrack.el; // mở bằng file:// thì phát qua thẻ <audio>
+        const el = track.el; // mở bằng file:// thì phát qua thẻ <audio>
         clearInterval(el._fade);
-        el.currentTime = 0;
-        el.volume = RaceTrack.volume;
+        el.loop = !!track.loop;
+        el.currentTime = pos;
+        el.volume = track.volume;
         el.play().catch(() => {});
         this.fileEl = el;
       }
@@ -327,9 +335,16 @@
 
     stop() {
       const ctx = Sound.ctx;
+      const track = this.fileTrack;
+      this.fileTrack = null;
+      // Ghi nhớ vị trí đang phát để lần sau phát tiếp
+      if (track && this.fileSrc) track.pos = ctx.currentTime - track.startedAt;
+      if (track && this.fileEl) track.pos = this.fileEl.currentTime;
       // Nhạc mp3: giảm dần trong ~0,5 giây cho êm rồi mới dừng
       if (this.fileSrc) {
         const src = this.fileSrc, g = this.fileGain;
+        g.gain.cancelScheduledValues(ctx.currentTime);
+        g.gain.setValueAtTime(g.gain.value, ctx.currentTime);
         g.gain.setTargetAtTime(0, ctx.currentTime, 0.15);
         setTimeout(() => { try { src.stop(); } catch (e) {} g.disconnect(); }, 1000);
         this.fileSrc = this.fileGain = null;
@@ -358,16 +373,27 @@
     },
   };
 
-  /* ================= Nhạc cuộc đua từ file (music/race.mp3) =================
-   * Muốn đổi nhạc: thay file music/race.mp3 (giữ nguyên tên). */
-  const RaceTrack = {
-    url: "music/race.mp3",
-    volume: 0.75,
-    data: null,
-    buffer: null,
-    el: null,
-    decoding: false,
-    failed: false,
+  /* ================= Nhạc nền từ file mp3 =================
+   * music/race.mp3  : nhạc cuộc đua
+   * music/timer.mp3 : nhạc lúc đếm giờ trả lời câu hỏi (tự lặp lại nếu hết bài)
+   * Muốn đổi nhạc: thay file mp3 tương ứng (giữ nguyên tên). */
+  function makeTrack(url, volume, opts) {
+    return Object.assign({
+      url,
+      volume,
+      loop: false,
+      resume: false,
+      pos: 0,
+      startedAt: 0,
+      data: null,
+      buffer: null,
+      el: null,
+      decoding: false,
+      failed: false,
+    }, opts, TrackMethods);
+  }
+
+  const TrackMethods = {
     preload() {
       fetch(this.url)
         .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(r.status)))
@@ -389,6 +415,11 @@
       this.decode();
       return !!this.buffer || (!!this.el && !this.failed && this.el.readyState >= 3);
     },
+  };
+
+  const Tracks = {
+    race: makeTrack("music/race.mp3", 0.75),
+    timer: makeTrack("music/timer.mp3", 0.6, { loop: true, resume: true }),
   };
 
   /* ================= Tiện ích giao diện ================= */
@@ -746,6 +777,7 @@
   // Hiện câu hỏi: đặt sẵn số giây nhưng CHƯA chạy
   function prepareTimer(sec) {
     stopTimer();
+    Tracks.timer.pos = 0; // câu mới: nhạc đếm giờ phát lại từ đầu
     T.total = sec;
     T.remaining = sec;
     T.lastWhole = Math.ceil(sec);
@@ -1106,7 +1138,7 @@
   function init() {
     // iPhone/Android chỉ cho phát âm thanh sau lần chạm đầu tiên
     document.addEventListener("pointerdown", () => Sound.on && Sound.ensure(), { once: true });
-    RaceTrack.preload();
+    Object.values(Tracks).forEach((t) => t.preload());
     buildOrder();
     renderTeams();
     initSetup();
