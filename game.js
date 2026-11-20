@@ -554,6 +554,16 @@
     });
   }
 
+  // Tốc độ trung bình (phần đường/giây) của cách chạy ngẫu nhiên bên dưới
+  const AVG_SPEED = 0.075;
+
+  // Độ dài cuộc đua (giây): bằng bản nhạc mp3; nếu chưa tải được nhạc thì 12–14 giây
+  function raceDuration() {
+    const tr = Tracks.race;
+    const len = tr.buffer ? tr.buffer.duration : tr.el && tr.el.duration;
+    return Sound.on && len > 5 ? len - 0.1 : rand(12, 14);
+  }
+
   function runRace() {
     const finish = document.querySelector(".finish-line");
     const racers = ["X", "O"].map((t) => {
@@ -570,13 +580,21 @@
     const res = $("race-result");
     let leader = null;
     raceSprint = false;
-    let last = performance.now();
-    let elapsed = 0;
+    // Thời gian cuộc đua = độ dài bản nhạc đua: chạy hết nhạc mới về đích
+    const D = raceDuration();
+    const t0 = performance.now();
+    let last = t0;
+    let scale = 1;
 
     function frame(now) {
-      const dt = Math.min(0.05, (now - last) / 1000);
+      const dt = Math.min(0.25, (now - last) / 1000);
       last = now;
-      elapsed += dt;
+      const elapsed = (now - t0) / 1000;
+      const left = D - elapsed;
+      const top = Math.max(racers[0].pos, racers[1].pos);
+      // Điều chỉnh tốc độ chung để người dẫn đầu chạm đích đúng lúc hết nhạc
+      const need = (1 - top) / Math.max(0.3, left) / AVG_SPEED;
+      scale += (Math.min(3, Math.max(0.1, need)) - scale) * Math.min(1, dt * 2);
       for (const r of racers) {
         if (elapsed >= r.nextChange) {
           const roll = Math.random();
@@ -587,11 +605,17 @@
             r.speed = rand(0.01, 0.025); // hụt hơi một chút
             r.nextChange = elapsed + rand(0.4, 0.7);
           } else {
-            r.speed = rand(0.04, 0.095); // ~13–14 giây mới về đích
+            r.speed = rand(0.04, 0.095); // chạy bình thường
             r.nextChange = elapsed + rand(0.4, 1.0);
           }
         }
-        r.pos += r.speed * dt;
+        if (left < 1.5 && r.pos === top) {
+          // 1,5 giây cuối: người dẫn đầu chạy đều để chạm vạch đúng lúc nhạc kết thúc
+          r.pos += (1 - r.pos) * Math.min(1, dt / Math.max(dt, left));
+        } else {
+          r.pos += r.speed * scale * dt;
+        }
+        if (left > 0) r.pos = Math.min(r.pos, 0.999); // chưa hết nhạc thì chưa ai về đích
         r.el.style.transform = "translateX(" + Math.min(r.pos, 1) * dist + "px)";
       }
 
@@ -608,10 +632,12 @@
         res.className = "race-result live " + lead.toLowerCase();
         res.textContent = (raceSprint ? "⚡ Nước rút! " : "🔥 ") + state.names[lead] + " đang dẫn trước!";
       }
-      const done = racers.filter((r) => r.pos >= 1);
-      if (done.length) {
-        done.sort((a, b) => b.pos - a.pos);
-        endRace(done[0].t, racers);
+      if (left <= 0) {
+        // Hết nhạc: ai đang ở trước thì về nhất (bằng nhau thì bốc thăm)
+        const win = a.pos === b.pos ? racers[Math.random() < 0.5 ? 0 : 1] : a.pos > b.pos ? a : b;
+        win.pos = 1;
+        win.el.style.transform = "translateX(" + dist + "px)";
+        endRace(win.t, racers);
         return;
       }
       requestAnimationFrame(frame);
