@@ -376,6 +376,7 @@
   /* ================= Nhạc nền từ file mp3 =================
    * music/race.mp3  : nhạc cuộc đua
    * music/timer.mp3 : nhạc lúc đếm giờ trả lời câu hỏi (tự lặp lại nếu hết bài)
+   * music/pick.mp3  : nhạc chờ lúc chọn ô X – O (phát tiếp từ chỗ đang dở ở lượt sau)
    * Muốn đổi nhạc: thay file mp3 tương ứng (giữ nguyên tên). */
   function makeTrack(url, volume, opts) {
     return Object.assign({
@@ -419,7 +420,8 @@
 
   const Tracks = {
     race: makeTrack("music/race.mp3", 0.75),
-    timer: makeTrack("music/timer.mp3", 0.6, { loop: true, resume: true }),
+    pick: makeTrack("music/pick.mp3", 0.45, { loop: true, resume: true }),
+    timer: makeTrack("music/timer.mp3", 0.5, { loop: true, resume: true }),
   };
 
   /* ================= Tiện ích giao diện ================= */
