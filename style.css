@@ -489,6 +489,8 @@ main {
   font-size: 1.3rem;
   font-weight: 700;
   color: #166534;
+  white-space: pre-line;
+  line-height: 1.45;
 }
 .q-answer:empty { display: none; }
 .judge { display: flex; gap: 14px; margin-top: auto; }
